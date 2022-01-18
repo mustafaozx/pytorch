@@ -1408,15 +1408,17 @@ class TestSparse(TestCase):
         _test_spadd()
         _test_spadd_hybrid()
 
-    @onlyCUDA
     @coalescedonoff
     @dtypes(torch.double, torch.cdouble)
     def test_sparse_add_out_bfloat16(self, device, dtype, coalesced):
         # fp32
         x, _, _ = self._gen_sparse(3, 5, 10, dtype, device, coalesced)
         y, _, _ = self._gen_sparse(3, 5, 10, dtype, device, coalesced)
-        x = x.float().cuda()
-        y = y.float().cuda()
+        x = x.float()
+        y = y.float()
+        if device == 'cuda':
+            x = x.cuda()
+            y = y.cuda()
         res_fp32 = torch.add(x, y)
 
         # bfloat16
@@ -1634,7 +1636,7 @@ class TestSparse(TestCase):
         _test_basic_ops()
         _test_basic_ops_hybrid()
 
-    @dtypes(torch.double, torch.cdouble)
+    @dtypes(torch.double, torch.cdouble, torch.bfloat16)
     def test_add_dense_sparse_mismatch(self, device, dtype):
         def test_shape(dense_size, sparse_dims_shape, dense_dims_shape, sparse_size):
             x = torch.zeros(dense_size, dtype=dtype, device=device)
@@ -1672,7 +1674,7 @@ class TestSparse(TestCase):
         self.assertEqual(self.safeToDense(y2), expected)
 
     @coalescedonoff
-    @dtypes(torch.double, torch.cdouble)
+    @dtypes(torch.double, torch.cdouble, torch.bfloat16)
     @unittest.skipIf(IS_WINDOWS, "See https://github.com/pytorch/pytorch/issues/73173")
     def test_sparse_mask(self, device, dtype, coalesced):
         def _test_sparse_mask_fixed():
