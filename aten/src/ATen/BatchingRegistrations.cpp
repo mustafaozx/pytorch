@@ -923,7 +923,7 @@ Tensor cat_batching_rule(const ITensorList& tensors, int64_t dim) {
   return physical_views[0].getPhysicalToLogicalMap().apply(result);
 }
 
-Tensor stack_batching_rule(TensorList tensors, int64_t dim) {
+Tensor stack_batching_rule(const ITensorList& tensors, int64_t dim) {
   auto physical_views = MultiBatchVmapTransform::logicalToPhysical(tensors);
   auto physical_tensors = fmap(
       physical_views, [](const VmapPhysicalView& view) -> Tensor { return view.tensor(); });

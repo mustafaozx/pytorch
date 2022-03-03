@@ -2,6 +2,7 @@
 
 #include <ATen/core/List.h>
 #include <ATen/core/Tensor.h>
+#include <type_traits>
 
 namespace at {
 class Tensor;
@@ -159,44 +160,151 @@ using IOptTensorRefList = c10::IList<at::OptionalTensorRef>;
 using IOptTensorRefListIterator = c10::IListIterator<at::OptionalTensorRef>;
 
 /*
- * Helper class for converting an `IOptTensorRefList` into its boxed container.
+ * Helper class for converting an `IList<T>` into another tag, while owning
+ * extra data, if necessary.
  *
  * What is this for?
  * =================
- * There are some situations where we need the boxed container of
- * `IOptTensorRefList`. If it already is in its boxed form, we can just return
- * that by calling `IOptTensorRefList::toBoxed()`. Otherwise, we have to
- * create a new boxed container, and copy the elements to it.
+ * There are some situations where we need a specific container type`.
+ * If the `IList<T>` is referencing that container type, we can just return
+ * that by calling `IList<T>::to<Tag>()`. Otherwise, we have to create a new
+ * owning container of that type, and copy the elements to it.
  *
  * What does it do?
  * ================
- * It optionally creates and owns a new boxed container. A reference
- * to it can be accessed by calling `IListMaybeIntoBoxed::get`.
+ * It optionally creates and owns a new container of type `OwnedT`, if
+ * necessary. A reference to it can be accessed by calling
+ * `IListMaybeOwn::get`. Notice that the returned type will be the one
+ * corresponding to that tag.
+ *
+ * For example:
+ * `IListMaybeOwn<Unboxed, Tensor, std::vector<Tensor>, Tensor>::get()`
+ * will return `const ArrayRef<Tensor>&`, even though its owning container
+ * type is `std::vector<Tensor>`.
  */
-class IOptTensorRefListMaybeOwnBoxed {
- private:
-  using IntoT = typename IOptTensorRefList::boxed_type;
+template <
+    typename ImplT,
+    IListTag TAG,
+    typename T,
+    typename OwnedT = typename c10::detail::IListTagImpl<TAG, T>::list_type,
+    typename ReturnT = const OwnedT&>
+class IListMaybeOwn {
+ protected:
+  using owned_list_type = OwnedT;
+  using return_type = ReturnT;
+
+  static typename owned_list_type::value_type map_elem(const T& elem) {
+    return elem;
+  }
 
  public:
-  IOptTensorRefListMaybeOwnBoxed(IOptTensorRefList ref) : ref_(ref) {
-    if (!ref.isBoxed()) {
-      own_ = IntoT();
+  IListMaybeOwn(IList<T> ref) : ref_(ref), own_(c10::nullopt) {
+    if (ImplT::needs_owning_data(ref)) {
+      own_ = owned_list_type();
       own_->reserve(ref.size());
-      for (const auto& t : ref) {
-          own_->push_back(t.has_value() ? optional<at::Tensor>(*t) : nullopt);
+      for (const auto& elem : ref) {
+        own_->emplace_back(ImplT::map_elem(elem));
       }
     } else {
       own_ = nullopt;
     }
   }
 
-  const IntoT& get() const {
-    return ref_.isBoxed() ? ref_.toBoxed() : own_.value();
+  return_type get() const {
+    return ImplT::needs_owning_data(ref_) ? *own_ : ImplT::from_ref(ref_);
+  }
+  return_type operator*() const {
+    return get();
   }
 
- private:
-  IOptTensorRefList ref_;
-  optional<IntoT> own_;
+ protected:
+  IList<T> ref_;
+  optional<owned_list_type> own_;
+};
+
+/*
+ * Helper for converting things into their unboxed representation.
+ * Since the unboxed `list_type` does not own the data, we create a
+ * `std::vector` instead.
+ */
+template <typename T>
+class MaybeOwnUnboxed : public IListMaybeOwn<
+                            MaybeOwnUnboxed<T>,
+                            IListTag::Unboxed,
+                            T,
+                            std::vector<T>,
+                            ArrayRef<T>> {
+ public:
+  using Super = IListMaybeOwn<
+      MaybeOwnUnboxed<T>,
+      IListTag::Unboxed,
+      T,
+      std::vector<T>,
+      ArrayRef<T>>;
+  using Super::IListMaybeOwn;
+  using typename Super::return_type;
+
+  static return_type from_ref(IList<T> ilist) {
+    return ilist.toUnboxed();
+  }
+
+  static bool needs_owning_data(IList<T> ilist) {
+    return !ilist.isUnboxed();
+  }
+};
+
+/*
+ * Helper for converting things into their boxed representation.
+ */
+template <typename T>
+class MaybeOwnBoxed
+    : public IListMaybeOwn<MaybeOwnBoxed<T>, IListTag::Boxed, T> {
+ public:
+  using Super = IListMaybeOwn<MaybeOwnBoxed<T>, IListTag::Boxed, T>;
+  using Super::IListMaybeOwn;
+  using typename Super::return_type;
+
+  static return_type from_ref(IList<OptionalTensorRef> ilist) {
+    return ilist.toBoxed();
+  }
+
+  static bool needs_owning_data(IList<T> ilist) {
+    return !ilist.isBoxed();
+  }
+};
+
+/*
+ * Helper for converting `IOptTensorRefList` into its boxed representation.
+ * We need this specialization, since its boxed and unboxed representations
+ * store different element types.
+ * For naming consitency, we specialize instead of inherit.
+ */
+template <>
+class MaybeOwnBoxed<OptionalTensorRef> : public IListMaybeOwn<
+                                             MaybeOwnBoxed<OptionalTensorRef>,
+                                             IListTag::Boxed,
+                                             OptionalTensorRef> {
+ public:
+  using Super = IListMaybeOwn<
+      MaybeOwnBoxed<OptionalTensorRef>,
+      IListTag::Boxed,
+      OptionalTensorRef>;
+  using Super::IListMaybeOwn;
+  using typename Super::owned_list_type;
+  using typename Super::return_type;
+
+  static return_type from_ref(IList<OptionalTensorRef> ilist) {
+    return ilist.toBoxed();
+  }
+
+  static bool needs_owning_data(IList<OptionalTensorRef> ilist) {
+    return !ilist.isBoxed();
+  }
+
+  static typename owned_list_type::value_type map_elem(
+      const OptionalTensorRef& elem) {
+    return elem.has_value() ? c10::optional<Tensor>(*elem) : c10::nullopt;
+  }
 };
 
 } // namespace at

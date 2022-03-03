@@ -4161,7 +4161,7 @@ Tensor embedding_dense_double_backward(const Tensor & grad, const Tensor & indic
 }
 
 Tensor index_backward(Tensor zeros_like_self, at::IOptTensorRefList indices, const Tensor& grad) {
-  auto boxed_indices = at::IOptTensorRefListMaybeOwnBoxed(indices);
+  auto boxed_indices = at::MaybeOwnBoxed<at::IOptTensorRefList>(indices);
   return (areAnyTensorSubclassLike({zeros_like_self, grad}) ||
           areAnyOptionalTensorSubclassLike(indices))
       ? zeros_like_self.index_put(boxed_indices.get(), grad, true)
@@ -4711,7 +4711,7 @@ Tensor cat_jvp(at::ITensorList tensors, int64_t dim) {
   return out_fw_grad;
 }
 
-Tensor stack_jvp(at::TensorList tensors, int64_t dim) {
+Tensor stack_jvp(at::ITensorList tensors, int64_t dim) {
   // Basically copy of cat_jvp above
   // TOD0: consolidate with the logic of cat_jvp
   Tensor out_fw_grad;
