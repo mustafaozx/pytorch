@@ -13,7 +13,7 @@ namespace at { namespace native {
 
 enum class SCATTER_GATHER_OP: uint8_t {REDUCE_ADD, REDUCE_MULTIPLY};
 
-using index_put_with_sort_fn = void(*)(Tensor &, const c10::List<c10::optional<Tensor>> &, const Tensor &, bool accumulate, bool unsafe);
+using index_put_with_sort_fn = void(*)(Tensor &, IOptTensorRefList, const Tensor &, bool accumulate, bool unsafe);
 
 using gather_fn = void (*)(const Tensor & result, const Tensor & self, int64_t dim, const Tensor & index);
 using scatter_fn = void(*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);

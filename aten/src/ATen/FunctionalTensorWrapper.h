@@ -126,7 +126,6 @@ TORCH_API std::vector<Tensor> to_functional_tensor(ITensorList t_list);
 
 TORCH_API Tensor from_functional_tensor(const Tensor& tensor);
 TORCH_API c10::optional<Tensor> from_functional_tensor(const c10::optional<Tensor>& t);
-TORCH_API c10::List<c10::optional<Tensor>> from_functional_tensor(const c10::List<c10::optional<Tensor>>& t_list);
 TORCH_API std::vector<Tensor> from_functional_tensor(ITensorList t_list);
 TORCH_API std::vector<OptionalTensorRef> from_functional_tensor(IOptTensorRefList t_list);
 

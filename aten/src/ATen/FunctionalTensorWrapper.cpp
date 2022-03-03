@@ -254,14 +254,6 @@ std::vector<Tensor> from_functional_tensor(ITensorList t_list) {
   }
   return outputs;
 }
-c10::List<c10::optional<Tensor>> from_functional_tensor(const c10::List<c10::optional<Tensor>>& t_list) {
-  c10::List<c10::optional<Tensor>> outputs;
-  outputs.reserve(t_list.size());
-  for (const auto i : c10::irange(t_list.size())) {
-    outputs.push_back(from_functional_tensor(t_list[i]));
-  }
-  return outputs;
-}
 std::vector<at::OptionalTensorRef> from_functional_tensor(IOptTensorRefList t_list) {
   std::vector<at::OptionalTensorRef> outputs;
   outputs.reserve(t_list.size());
